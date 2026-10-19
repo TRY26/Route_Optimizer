@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aiqon | Intelligent Logistics Route Optimizer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; background-color: #0b0f19; color: #f1f5f9; }
+    .glass-card { background: rgba(17, 24, 39, 0.75); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+    .glass-header { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+    .accent-gradient { background: linear-gradient(135deg, #3b82f6, #06b6d4); }
+    .gold-badge { background: linear-gradient(135deg, #f59e0b, #d97706); }
+    input[type=range] { accent-color: #3b82f6; }
+    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="glass-header sticky top-0 z-50 px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+    <div class="flex items-center space-x-3">
+      <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-blue-500/30">
+        <i class="fa-solid fa-route"></i>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-xl font-bold tracking-tight text-white">Aiqon</span>
+          <span class="text-xs uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30 font-semibold">Route Optimizer</span>
+        </div>
+        <p class="text-xs text-slate-400">Multi-Objective Decision Support Under Cost, Time & Risk Uncertainty</p>
+      </div>
+    </div>
+
+    <!-- Quick Controls -->
+    <div class="flex items-center gap-4 flex-wrap">
+      <!-- Shipment Selector -->
+      <div class="flex items-center gap-2">
+        <label class="text-xs text-slate-400 uppercase font-semibold">Shipment:</label>
+        <select id="shipmentSelect" onchange="fetchRecommendation()" class="bg-slate-800 border border-slate-700 text-sm rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none">
+          <option value="SHP-001">Loading...</option>
+        </select>
+      </div>
+
+      <!-- Profile Selector -->
+      <div class="flex items-center gap-2">
+        <label class="text-xs text-slate-400 uppercase font-semibold">Priority Profile:</label>
+        <select id="profileSelect" onchange="onProfileChange()" class="bg-slate-800 border border-slate-700 text-sm rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none">
+          <option value="balanced">Balanced Logistics</option>
+          <option value="cost_saver">Cost Saver (Economic)</option>
+          <option value="speed_first">Speed First (Urgent)</option>
+          <option value="risk_averse">Risk Averse (High Reliability)</option>
+          <option value="eco_conscious">Eco-Conscious (Green)</option>
+          <option value="custom">Custom Weights</option>
+        </select>
+      </div>
+
+      <!-- Benchmark Modal Trigger -->
+      <button onclick="openBenchmarkModal()" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm border border-slate-700 flex items-center gap-2 transition">
+        <i class="fa-solid fa-chart-line text-blue-400"></i>
+        <span>Evaluation Benchmark</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Custom Weights Slider Drawer (collapsible) -->
+  <div id="customWeightsPanel" class="hidden bg-slate-900 border-b border-slate-800 px-6 py-4 transition-all">
+    <div class="flex items-center justify-between mb-3">
+      <h4 class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+        <i class="fa-solid fa-sliders text-blue-400"></i> Custom Multi-Objective Weights
+      </h4>
+      <span class="text-xs text-slate-400">Adjust sliders to dynamically re-evaluate trade-offs</span>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-6">
+      <div>
+        <div class="flex justify-between text-xs mb-1">
+          <span class="text-slate-400">Freight Cost:</span>
+          <span id="lblWeightCost" class="font-bold text-blue-400">30%</span>
+        </div>
+        <input type="range" id="sliderCost" min="5" max="80" value="30" oninput="updateCustomSlider()" class="w-full">
+      </div>
+      <div>
+        <div class="flex justify-between text-xs mb-1">
+          <span class="text-slate-400">Transit Time:</span>
+          <span id="lblWeightTime" class="font-bold text-blue-400">30%</span>
+        </div>
+        <input type="range" id="sliderTime" min="5" max="80" value="30" oninput="updateCustomSlider()" class="w-full">
+      </div>
+      <div>
+        <div class="flex justify-between text-xs mb-1">
+          <span class="text-slate-400">Delay Reliability:</span>
+          <span id="lblWeightDelay" class="font-bold text-blue-400">20%</span>
+        </div>
+        <input type="range" id="sliderDelay" min="5" max="80" value="20" oninput="updateCustomSlider()" class="w-full">
+      </div>
+      <div>
+        <div class="flex justify-between text-xs mb-1">
+          <span class="text-slate-400">Geopolitical Safety:</span>
+          <span id="lblWeightGeo" class="font-bold text-blue-400">15%</span>
+        </div>
+        <input type="range" id="sliderGeo" min="5" max="80" value="15" oninput="updateCustomSlider()" class="w-full">
+      </div>
+      <div>
+        <div class="flex justify-between text-xs mb-1">
+          <span class="text-slate-400">Carbon Footprint:</span>
+          <span id="lblWeightCarbon" class="font-bold text-blue-400">5%</span>
+        </div>
+        <input type="range" id="sliderCarbon" min="0" max="50" value="5" oninput="updateCustomSlider()" class="w-full">
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Dashboard Container -->
+  <main class="flex-1 px-6 py-6 space-y-6 max-w-7xl mx-auto w-full">
+
+    <!-- Shipment Metadata Banner -->
+    <div id="shipmentMetaCard" class="glass-card rounded-2xl p-5 shadow-xl flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-blue-400 text-2xl">
+          <i class="fa-solid fa-ship"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h2 id="metaCorridor" class="text-lg font-bold text-white">Loading Trade Corridor...</h2>
+            <span id="metaPriority" class="text-xs px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-300 font-medium">Standard</span>
+          </div>
+          <p id="metaRoutePath" class="text-sm text-slate-400">Origin -> Destination</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-6 text-sm">
+        <div>
+          <span class="text-xs text-slate-500 block uppercase">Cargo Type</span>
+          <span id="metaCargo" class="font-semibold text-slate-200">General Merchandise</span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block uppercase">Payload Weight</span>
+          <span id="metaWeight" class="font-semibold text-slate-200">22,000 kg</span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block uppercase">Cargo Valuation</span>
+          <span id="metaValue" class="font-semibold text-slate-200">$85,000</span>
+        </div>
+        <div>
+          <span class="text-xs text-slate-500 block uppercase">Target Delivery</span>
+          <span id="metaTargetDays" class="font-semibold text-blue-400">30.0 days</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top Recommendation Highlight Card -->
+    <div id="recommendationBanner" class="glass-card rounded-2xl p-6 border-l-4 border-blue-500 relative overflow-hidden shadow-2xl">
+      <div class="absolute -right-12 -top-12 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+      <div class="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-4">
+        <div>
+          <div class="flex items-center gap-2 mb-1">
+            <span class="gold-badge text-black font-bold text-xs uppercase px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow">
+              <i class="fa-solid fa-trophy"></i> Optimal Recommendation
+            </span>
+            <span id="recStrategyBadge" class="bg-blue-500/20 text-blue-300 border border-blue-500/30 text-xs px-2 py-0.5 rounded-md font-medium">Strategy</span>
+            <span id="recParetoBadge" class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs px-2 py-0.5 rounded-md font-medium">Pareto Optimal</span>
+          </div>
+          <h3 id="recRouteName" class="text-2xl font-bold text-white tracking-tight">Computing Route...</h3>
+          <p id="recRouteId" class="text-xs text-slate-400">ID: R-000</p>
+        </div>
+
+        <!-- Metrics Chips -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+          <div class="bg-slate-800/80 rounded-xl p-3 border border-slate-700/60">
+            <span class="text-xs text-slate-400 uppercase block">Total Freight Cost</span>
+            <span id="recCost" class="text-lg font-bold text-emerald-400">$0.00</span>
+          </div>
+          <div class="bg-slate-800/80 rounded-xl p-3 border border-slate-700/60">
+            <span class="text-xs text-slate-400 uppercase block">Estimated Transit</span>
+            <span id="recTransit" class="text-lg font-bold text-blue-400">0.0 d</span>
+          </div>
+          <div class="bg-slate-800/80 rounded-xl p-3 border border-slate-700/60">
+            <span class="text-xs text-slate-400 uppercase block">P95 SLA Buffer</span>
+            <span id="recP95" class="text-lg font-bold text-purple-400">0.0 d</span>
+          </div>
+          <div class="bg-slate-800/80 rounded-xl p-3 border border-slate-700/60">
+            <span class="text-xs text-slate-400 uppercase block">Composite Risk</span>
+            <span id="recRisk" class="text-lg font-bold text-amber-400">0.00</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Natural Language Justification Box -->
+      <div class="mt-4 pt-4 border-t border-slate-800">
+        <h5 class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1 flex items-center gap-1.5">
+          <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i> Dispatcher Decision Rationale
+        </h5>
+        <p id="recExecutiveSummary" class="text-sm text-slate-200 leading-relaxed font-normal bg-slate-800/50 p-3.5 rounded-xl border border-slate-700/50">
+          Generating explanation...
+        </p>
+
+        <!-- Runner-up comparative bullets -->
+        <div id="recComparativePoints" class="mt-3 space-y-1.5 text-xs text-slate-300">
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Radar Chart: Multi-criteria Balance -->
+      <div class="glass-card rounded-2xl p-5 shadow-xl flex flex-col">
+        <div class="flex items-center justify-between mb-3">
+          <h4 class="text-sm font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-chart-pie text-cyan-400"></i> Multi-Criteria Radar
+          </h4>
+          <span class="text-xs text-slate-400">Higher = Better</span>
+        </div>
+        <div class="flex-1 relative min-h-[260px] flex items-center justify-center">
+          <canvas id="radarChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Pareto Scatter Plot: Cost vs Transit Time -->
+      <div class="glass-card rounded-2xl p-5 shadow-xl flex flex-col">
+        <div class="flex items-center justify-between mb-3">
+          <h4 class="text-sm font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-project-diagram text-blue-400"></i> Pareto Frontier (Cost vs Time)
+          </h4>
+          <span class="text-xs text-slate-400">Bottom-Left = Optimal</span>
+        </div>
+        <div class="flex-1 relative min-h-[260px] flex items-center justify-center">
+          <canvas id="paretoChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Monte Carlo Uncertainty Distribution -->
+      <div class="glass-card rounded-2xl p-5 shadow-xl flex flex-col">
+        <div class="flex items-center justify-between mb-3">
+          <h4 class="text-sm font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-dice-d20 text-purple-400"></i> Transit Lead Time & P95 Buffer
+          </h4>
+          <span class="text-xs text-slate-400">1,000 Monte Carlo Runs</span>
+        </div>
+        <div class="flex-1 relative min-h-[260px] flex items-center justify-center">
+          <canvas id="mcChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Multi-Route Options Comparison Table -->
+    <div class="glass-card rounded-2xl p-6 shadow-xl">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h4 class="text-base font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-list-check text-emerald-400"></i> Evaluated Route Options
+          </h4>
+          <p class="text-xs text-slate-400">Complete ranking based on blended MAUT Utility & TOPSIS Closeness</p>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto custom-scroll">
+        <table class="w-full text-left border-collapse text-sm">
+          <thead>
+            <tr class="border-b border-slate-700 text-xs uppercase text-slate-400">
+              <th class="py-3 px-3">Rank</th>
+              <th class="py-3 px-3">Route Option</th>
+              <th class="py-3 px-3">Strategy</th>
+              <th class="py-3 px-3 text-right">Cost ($)</th>
+              <th class="py-3 px-3 text-right">Lead Time</th>
+              <th class="py-3 px-3 text-right">P95 SLA</th>
+              <th class="py-3 px-3 text-right">Delay Risk</th>
+              <th class="py-3 px-3 text-right">Geopolitical</th>
+              <th class="py-3 px-3 text-right">TOPSIS</th>
+              <th class="py-3 px-3 text-center">Pareto</th>
+              <th class="py-3 px-3 text-center">Action</th>
+            </tr>
+          </thead>
+          <tbody id="routesTableBody" class="divide-y divide-slate-800 text-slate-200">
+            <!-- Dynamically populated -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Alternative Disqualifications & Sensitivity Analysis Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- Alternative Route Disqualification Reasons -->
+      <div class="glass-card rounded-2xl p-5 shadow-xl">
+        <h4 class="text-sm font-bold text-white flex items-center gap-2 mb-3">
+          <i class="fa-solid fa-ban text-rose-400"></i> Alternative Route Review & Rejection Rationale
+        </h4>
+        <div id="alternativesContainer" class="space-y-3">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Sensitivity Analysis -->
+      <div class="glass-card rounded-2xl p-5 shadow-xl">
+        <h4 class="text-sm font-bold text-white flex items-center gap-2 mb-3">
+          <i class="fa-solid fa-scale-balanced text-amber-400"></i> Parameter Weight Sensitivity & Flipping Thresholds
+        </h4>
+        <p class="text-xs text-slate-400 mb-3">
+          Demonstrates system robustness under varying business constraints and identifies when runner-ups become optimal.
+        </p>
+        <div id="sensitivityContainer" class="space-y-2.5 text-xs">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Leg Details Modal -->
+  <div id="legModal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="glass-card rounded-2xl max-w-2xl w-full p-6 shadow-2xl relative">
+      <button onclick="closeLegModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-lg">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+      <h3 id="modalRouteTitle" class="text-lg font-bold text-white mb-1">Route Leg Breakdown</h3>
+      <p id="modalRouteSubtitle" class="text-xs text-slate-400 mb-4">Multi-leg transport stages and node risk factors</p>
+
+      <div id="modalLegsContainer" class="space-y-3 max-h-[60vh] overflow-y-auto custom-scroll pr-1">
+        <!-- Dynamically rendered -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Evaluation Benchmark Modal -->
+  <div id="benchmarkModal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="glass-card rounded-2xl max-w-3xl w-full p-6 shadow-2xl relative">
+      <button onclick="closeBenchmarkModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-lg">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+      <div class="flex items-center gap-2 mb-2">
+        <span class="w-8 h-8 rounded-lg bg-blue-600/30 text-blue-400 flex items-center justify-center">
+          <i class="fa-solid fa-microchip"></i>
+        </span>
+        <h3 class="text-lg font-bold text-white">System Benchmark Evaluation</h3>
+      </div>
+      <p class="text-xs text-slate-400 mb-4">Quantitative evaluation against naive industry baseline heuristics across all 35 simulated trade lanes.</p>
+
+      <div id="benchmarkLoading" class="py-12 text-center text-slate-400">
+        <i class="fa-solid fa-spinner fa-spin text-2xl text-blue-400 mb-2"></i>
+        <p>Evaluating trade lanes and benchmarking heuristics...</p>
+      </div>
+
+      <div id="benchmarkContent" class="hidden space-y-4">
+        <!-- High-level KPI tiles -->
+        <div class="grid grid-cols-3 gap-3 text-center">
+          <div class="bg-slate-800 rounded-xl p-3 border border-slate-700">
+            <span class="text-xs text-slate-400 block uppercase">Pareto Optimality</span>
+            <span id="bmParetoRate" class="text-xl font-bold text-emerald-400">100%</span>
+            <span class="text-[10px] text-slate-500 block">Of all recommendations</span>
+          </div>
+          <div class="bg-slate-800 rounded-xl p-3 border border-slate-700">
+            <span class="text-xs text-slate-400 block uppercase">Decision Stability</span>
+            <span id="bmStability" class="text-xl font-bold text-blue-400">97.1%</span>
+            <span class="text-[10px] text-slate-500 block">Under ±8% random noise</span>
+          </div>
+          <div class="bg-slate-800 rounded-xl p-3 border border-slate-700">
+            <span class="text-xs text-slate-400 block uppercase">Shipments Evaluated</span>
+            <span id="bmTotal" class="text-xl font-bold text-white">35</span>
+            <span class="text-[10px] text-slate-500 block">129 Route Options</span>
+          </div>
+        </div>
+
+        <!-- Heuristic comparison details -->
+        <div class="bg-slate-800/60 rounded-xl p-4 border border-slate-700 space-y-3 text-xs">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-700">
+            <span class="font-semibold text-slate-300">vs Greedy Cheapest Baseline</span>
+            <span id="bmVsCheap" class="text-emerald-400 font-medium">Saves 9.5 days (-41.5% lead time) with 45.9% risk reduction</span>
+          </div>
+          <div class="flex items-center justify-between pb-2 border-b border-slate-700">
+            <span class="font-semibold text-slate-300">vs Greedy Fastest Baseline</span>
+            <span id="bmVsFast" class="text-blue-400 font-medium">Saves $43,408 (70.1% cost savings) with modest +10.3d lead time</span>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-slate-300">Supply Chain Trade-off Verdict</span>
+            <span class="text-slate-200">Optimal multi-objective equilibrium balancing SLA risk and freight capital</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="glass-header px-6 py-4 text-center text-xs text-slate-500 mt-auto">
+    Aiqon AI Internship Assignment &bull; Route Optimization Under Cost, Time & Risk Constraints &bull; Powered by TOPSIS & MAUT
+  </footer>
+
+  <!-- App Script -->
+  <script>
+    let currentData = null;
+    let radarChartInst = null;
+    let paretoChartInst = null;
+    let mcChartInst = null;
+
+    // Load initial shipments dropdown
+    async function initApp() {
+      try {
+        const res = await fetch('/api/shipments');
+        const shipments = await res.json();
+        const sel = document.getElementById('shipmentSelect');
+        sel.innerHTML = '';
+        shipments.forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s.shipment_id;
+          opt.textContent = `${s.shipment_id} - ${s.corridor.split('(')[0]} (${s.cargo_type})`;
+          sel.appendChild(opt);
+        });
+        await fetchRecommendation();
+      } catch (err) {
+        console.error("Failed to load initial shipments:", err);
+      }
+    }
+
+    function onProfileChange() {
+      const p = document.getElementById('profileSelect').value;
+      const customPanel = document.getElementById('customWeightsPanel');
+      if (p === 'custom') {
+        customPanel.classList.remove('hidden');
+      } else {
+        customPanel.classList.add('hidden');
+      }
+      fetchRecommendation();
+    }
+
+    function updateCustomSlider() {
+      document.getElementById('lblWeightCost').textContent = document.getElementById('sliderCost').value + '%';
+      document.getElementById('lblWeightTime').textContent = document.getElementById('sliderTime').value + '%';
+      document.getElementById('lblWeightDelay').textContent = document.getElementById('sliderDelay').value + '%';
+      document.getElementById('lblWeightGeo').textContent = document.getElementById('sliderGeo').value + '%';
+      document.getElementById('lblWeightCarbon').textContent = document.getElementById('sliderCarbon').value + '%';
+      fetchRecommendation();
+    }
+
+    async function fetchRecommendation() {
+      const shipmentId = document.getElementById('shipmentSelect').value;
+      const profile = document.getElementById('profileSelect').value;
+
+      let payload = { shipment_id: shipmentId, profile: profile };
+
+      if (profile === 'custom') {
+        payload.custom_weights = {
+          cost: parseFloat(document.getElementById('sliderCost').value) / 100,
+          time: parseFloat(document.getElementById('sliderTime').value) / 100,
+          delay_risk: parseFloat(document.getElementById('sliderDelay').value) / 100,
+          geopolitical_risk: parseFloat(document.getElementById('sliderGeo').value) / 100,
+          carbon: parseFloat(document.getElementById('sliderCarbon').value) / 100
+        };
+      }
+
+      try {
+        const res = await fetch('/api/recommend', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        currentData = await res.json();
+        renderDashboard(currentData);
+      } catch (err) {
+        console.error("Failed to fetch recommendation:", err);
+      }
+    }
+
+    function renderDashboard(data) {
+      const s = data.shipment;
+      const rec = data.evaluations.find(e => e.route_id === data.recommended_route_id);
+      const expl = data.explanation;
+
+      // 1. Shipment Meta
+      document.getElementById('metaCorridor').textContent = s.corridor;
+      document.getElementById('metaRoutePath').textContent = `${s.origin}  ➔  ${s.destination}`;
+      document.getElementById('metaPriority').textContent = `${s.priority_level} Priority`;
+      document.getElementById('metaCargo').textContent = s.cargo_type;
+      document.getElementById('metaWeight').textContent = `${s.cargo_weight_kg.toLocaleString()} kg`;
+      document.getElementById('metaValue').textContent = `$${s.cargo_value_usd.toLocaleString()}`;
+      document.getElementById('metaTargetDays').textContent = `${s.target_delivery_days} days`;
+
+      // 2. Top Recommendation Banner
+      document.getElementById('recRouteName').textContent = rec.name;
+      document.getElementById('recRouteId').textContent = `Route ID: ${rec.route_id}`;
+      document.getElementById('recStrategyBadge').textContent = rec.strategy;
+      document.getElementById('recParetoBadge').textContent = rec.is_pareto ? '✓ Pareto Optimal' : 'Non-Pareto';
+      document.getElementById('recCost').textContent = `$${rec.cost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+      document.getElementById('recTransit').textContent = `${rec.transit_time_days.toFixed(1)} d`;
+      document.getElementById('recP95').textContent = `${rec.simulated_p95_days.toFixed(1)} d`;
+      document.getElementById('recRisk').textContent = rec.composite_risk.toFixed(2);
+
+      // Justification text
+      document.getElementById('recExecutiveSummary').textContent = expl.executive_summary;
+
+      // Comparative bullets
+      const compBox = document.getElementById('recComparativePoints');
+      compBox.innerHTML = '';
+      if (expl.trade_off_breakdown && expl.trade_off_breakdown.key_factors) {
+        expl.trade_off_breakdown.key_factors.forEach(f => {
+          const li = document.createElement('div');
+          li.className = 'flex items-center gap-2';
+          li.innerHTML = `<i class="fa-solid fa-angle-right text-blue-400 text-[10px]"></i><span>${f}</span>`;
+          compBox.appendChild(li);
+        });
+      }
+
+      // 3. Populate Table
+      const tb = document.getElementById('routesTableBody');
+      tb.innerHTML = '';
+      data.evaluations.forEach(ev => {
+        const isWinner = ev.route_id === data.recommended_route_id;
+        const tr = document.createElement('tr');
+        tr.className = `hover:bg-slate-800/50 transition ${isWinner ? 'bg-blue-950/20 font-medium' : ''}`;
+
+        tr.innerHTML = `
+          <td class="py-3 px-3">
+            ${isWinner ? '<span class="gold-badge text-black font-bold text-xs px-2 py-0.5 rounded-full shadow">#1</span>' : `<span class="text-slate-400 font-semibold">#${ev.rank}</span>`}
+          </td>
+          <td class="py-3 px-3 font-semibold ${isWinner ? 'text-blue-300' : 'text-slate-200'}">
+            ${ev.name}
+            <div class="text-[11px] text-slate-500 font-mono">${ev.route_id}</div>
+          </td>
+          <td class="py-3 px-3">
+            <span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">${ev.strategy}</span>
+          </td>
+          <td class="py-3 px-3 text-right font-mono text-emerald-400">$${ev.cost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+          <td class="py-3 px-3 text-right font-mono text-blue-400">${ev.transit_time_days.toFixed(1)} d</td>
+          <td class="py-3 px-3 text-right font-mono text-purple-400">${ev.simulated_p95_days.toFixed(1)} d</td>
+          <td class="py-3 px-3 text-right font-mono">${(ev.delay_probability * 100).toFixed(0)}%</td>
+          <td class="py-3 px-3 text-right font-mono ${ev.geopolitical_risk > 0.5 ? 'text-rose-400 font-bold' : 'text-slate-300'}">${ev.geopolitical_risk.toFixed(2)}</td>
+          <td class="py-3 px-3 text-right font-mono text-amber-400">${(ev.topsis_score * 100).toFixed(1)}%</td>
+          <td class="py-3 px-3 text-center">
+            ${ev.is_pareto ? '<span class="text-xs text-emerald-400 font-bold">YES</span>' : '<span class="text-xs text-slate-500">NO</span>'}
+          </td>
+          <td class="py-3 px-3 text-center">
+            <button onclick="openLegModal('${ev.route_id}')" class="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
+              <i class="fa-solid fa-layer-group text-blue-400"></i> Legs
+            </button>
+          </td>
+        `;
+        tb.appendChild(tr);
+      });
+
+      // 4. Alternatives Rejection Rationale
+      const altBox = document.getElementById('alternativesContainer');
+      altBox.innerHTML = '';
+      expl.alternatives_reviewed.forEach(alt => {
+        const d = document.createElement('div');
+        d.className = 'bg-slate-800/40 p-3 rounded-xl border border-slate-700/60 flex items-start justify-between gap-3';
+        d.innerHTML = `
+          <div>
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-xs font-bold text-slate-300">${alt.route_name}</span>
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">${alt.rank}</span>
+            </div>
+            <p class="text-xs text-rose-300/90"><i class="fa-solid fa-triangle-exclamation text-rose-400 mr-1.5"></i>${alt.primary_drawback}</p>
+          </div>
+        `;
+        altBox.appendChild(d);
+      });
+
+      // 5. Sensitivity Analysis
+      const sensBox = document.getElementById('sensitivityContainer');
+      sensBox.innerHTML = '';
+      const sens = data.sensitivity.criteria_sensitivity;
+      for (const [crit, info] of Object.entries(sens)) {
+        const item = document.createElement('div');
+        item.className = 'p-2.5 rounded-lg bg-slate-800/50 border border-slate-700/50';
+        const isStable = info.is_stable;
+        let flipHtml = '';
+        if (info.flips && info.flips.length > 0) {
+          const firstFlip = info.flips[0];
+          flipHtml = `<span class="text-amber-400 block mt-1">↳ Flips to <b>${firstFlip.new_winner_name}</b> at weight ≥ ${(firstFlip.weight_value * 100).toFixed(0)}%</span>`;
+        } else {
+          flipHtml = `<span class="text-emerald-400/90 block mt-1">↳ Invariant across full tested parameter range</span>`;
+        }
+
+        item.innerHTML = `
+          <div class="flex justify-between items-center">
+            <span class="font-bold text-slate-300 uppercase">${crit.replace('_', ' ')}</span>
+            <span class="text-slate-400 font-mono">Current: ${(info.base_weight * 100).toFixed(0)}%</span>
+          </div>
+          ${flipHtml}
+        `;
+        sensBox.appendChild(item);
+      }
+
+      // 6. Render Charts
+      renderRadarChart(data.evaluations, data.recommended_route_id);
+      renderParetoChart(data.evaluations, data.recommended_route_id);
+      renderMonteCarloChart(data.evaluations, data.recommended_route_id);
+    }
+
+    // Chart 1: Radar Multi-Criteria
+    function renderRadarChart(evals, winnerId) {
+      const ctx = document.getElementById('radarChart').getContext('2d');
+      if (radarChartInst) radarChartInst.destroy();
+
+      // Normalize metrics on 0-100 scale (100 is best)
+      const maxCost = Math.max(...evals.map(e => e.cost));
+      const minCost = Math.min(...evals.map(e => e.cost));
+      const maxTime = Math.max(...evals.map(e => e.transit_time_days));
+      const minTime = Math.min(...evals.map(e => e.transit_time_days));
+
+      const labels = ['Affordability', 'Speed', 'Delay Safety', 'Geopolitical Safety', 'Low Carbon'];
+
+      const datasets = evals.slice(0, 4).map((e, idx) => {
+        const isWinner = e.route_id === winnerId;
+        const costScore = maxCost > minCost ? ((maxCost - e.cost) / (maxCost - minCost)) * 100 : 100;
+        const timeScore = maxTime > minTime ? ((maxTime - e.transit_time_days) / (maxTime - minTime)) * 100 : 100;
+        const delayScore = (1.0 - e.delay_probability) * 100;
+        const geoScore = (1.0 - e.geopolitical_risk) * 100;
+        const carbonScore = Math.max(10, 100 - (e.carbon_kg / 100));
+
+        const colors = [
+          'rgba(59, 130, 246, 0.8)',
+          'rgba(16, 185, 129, 0.7)',
+          'rgba(245, 158, 11, 0.7)',
+          'rgba(239, 68, 68, 0.7)'
+        ];
+
+        return {
+          label: isWinner ? `★ ${e.name.substring(0, 18)}` : e.name.substring(0, 18),
+          data: [costScore, timeScore, delayScore, geoScore, carbonScore],
+          backgroundColor: isWinner ? 'rgba(59, 130, 246, 0.25)' : 'transparent',
+          borderColor: isWinner ? '#3b82f6' : colors[idx % colors.length],
+          borderWidth: isWinner ? 3 : 1.5,
+          pointRadius: isWinner ? 4 : 2
+        };
+      });
+
+      radarChartInst = new Chart(ctx, {
+        type: 'radar',
+        data: { labels: labels, datasets: datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            r: {
+              grid: { color: 'rgba(255, 255, 255, 0.08)' },
+              angleLines: { color: 'rgba(255, 255, 255, 0.08)' },
+              ticks: { display: false, max: 100, min: 0 },
+              pointLabels: { color: '#94a3b8', font: { size: 10 } }
+            }
+          },
+          plugins: {
+            legend: { position: 'bottom', labels: { color: '#cbd5e1', font: { size: 10 } } }
+          }
+        }
+      });
+    }
+
+    // Chart 2: Pareto Frontier (Cost vs Transit Time)
+    function renderParetoChart(evals, winnerId) {
+      const ctx = document.getElementById('paretoChart').getContext('2d');
+      if (paretoChartInst) paretoChartInst.destroy();
+
+      const points = evals.map(e => ({
+        x: e.transit_time_days,
+        y: e.cost,
+        name: e.name,
+        isWinner: e.route_id === winnerId,
+        isPareto: e.is_pareto
+      }));
+
+      paretoChartInst = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+          datasets: [
+            {
+              label: 'Route Options',
+              data: points,
+              backgroundColor: points.map(p => p.isWinner ? '#3b82f6' : (p.isPareto ? '#10b981' : '#64748b')),
+              borderColor: points.map(p => p.isWinner ? '#ffffff' : 'transparent'),
+              borderWidth: 2,
+              pointRadius: points.map(p => p.isWinner ? 9 : (p.isPareto ? 7 : 5)),
+              pointHoverRadius: 10
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              title: { display: true, text: 'Lead Time (Days)', color: '#94a3b8' },
+              grid: { color: 'rgba(255, 255, 255, 0.08)' },
+              ticks: { color: '#94a3b8' }
+            },
+            y: {
+              title: { display: true, text: 'Freight Cost ($)', color: '#94a3b8' },
+              grid: { color: 'rgba(255, 255, 255, 0.08)' },
+              ticks: { color: '#94a3b8' }
+            }
+          },
+          plugins: {
+            tooltip: {
+              callbacks: {
+                label: function(ctx) {
+                  const p = ctx.raw;
+                  return `${p.name}: ${p.x.toFixed(1)}d, $${p.y.toLocaleString()} ${p.isWinner ? '[RECOMMENDED]' : ''}`;
+                }
+              }
+            },
+            legend: { display: false }
+          }
+        }
+      });
+    }
+
+    // Chart 3: Monte Carlo Expected vs P95
+    function renderMonteCarloChart(evals, winnerId) {
+      const ctx = document.getElementById('mcChart').getContext('2d');
+      if (mcChartInst) mcChartInst.destroy();
+
+      const labels = evals.map(e => e.name.substring(0, 15) + '..');
+      const expectedData = evals.map(e => e.simulated_expected_days);
+      const p95Data = evals.map(e => e.simulated_p95_days);
+
+      mcChartInst = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Expected Days (Mean)',
+              data: expectedData,
+              backgroundColor: 'rgba(59, 130, 246, 0.7)'
+            },
+            {
+              label: 'P95 Buffer Days (Worst-case)',
+              data: p95Data,
+              backgroundColor: 'rgba(168, 85, 247, 0.6)'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              grid: { color: 'rgba(255, 255, 255, 0.08)' },
+              ticks: { color: '#94a3b8', font: { size: 9 } }
+            },
+            y: {
+              title: { display: true, text: 'Transit Days', color: '#94a3b8' },
+              grid: { color: 'rgba(255, 255, 255, 0.08)' },
+              ticks: { color: '#94a3b8' }
+            }
+          },
+          plugins: {
+            legend: { position: 'bottom', labels: { color: '#cbd5e1', font: { size: 10 } } }
+          }
+        }
+      });
+    }
+
+    // Modal helpers
+    function openLegModal(routeId) {
+      if (!currentData) return;
+      const r = currentData.evaluations.find(e => e.route_id === routeId);
+      if (!r) return;
+
+      document.getElementById('modalRouteTitle').textContent = `${r.name} (${r.strategy})`;
+      document.getElementById('modalRouteSubtitle').textContent = `Total Legs: ${r.legs.length} | Cost: $${r.cost.toLocaleString()} | Transit: ${r.transit_time_days} days`;
+
+      const c = document.getElementById('modalLegsContainer');
+      c.innerHTML = '';
+
+      r.legs.forEach((leg, i) => {
+        const item = document.createElement('div');
+        item.className = 'p-3 rounded-xl bg-slate-800/80 border border-slate-700 flex items-center justify-between text-xs';
+        item.innerHTML = `
+          <div>
+            <div class="flex items-center gap-2 mb-1">
+              <span class="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold text-[10px]">${i+1}</span>
+              <span class="font-bold text-white">${leg.origin}  ➔  ${leg.destination}</span>
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300">${leg.mode}</span>
+            </div>
+            <div class="text-slate-400 text-[11px] flex gap-3 mt-1">
+              <span>Time: <b class="text-slate-200">${leg.transit_time_days}d</b></span>
+              <span>Cost: <b class="text-slate-200">$${leg.cost_usd.toLocaleString()}</b></span>
+              <span>Delay Prob: <b class="text-slate-200">${(leg.delay_prob * 100).toFixed(0)}%</b></span>
+              <span>Geo Risk: <b class="${leg.geopolitical_risk > 0.4 ? 'text-rose-400' : 'text-slate-200'}">${leg.geopolitical_risk.toFixed(2)}</b></span>
+            </div>
+          </div>
+        `;
+        c.appendChild(item);
+      });
+
+      document.getElementById('legModal').classList.remove('hidden');
+    }
+
+    function closeLegModal() {
+      document.getElementById('legModal').classList.add('hidden');
+    }
+
+    async function openBenchmarkModal() {
+      document.getElementById('benchmarkModal').classList.remove('hidden');
+      document.getElementById('benchmarkLoading').classList.remove('hidden');
+      document.getElementById('benchmarkContent').classList.add('hidden');
+
+      try {
+        const p = document.getElementById('profileSelect').value;
+        const res = await fetch(`/api/benchmark?profile=${p === 'custom' ? 'balanced' : p}`);
+        const data = await res.json();
+
+        document.getElementById('bmParetoRate').textContent = `${data.pareto_optimality_rate}%`;
+        document.getElementById('bmStability').textContent = `${data.decision_stability_index}%`;
+        document.getElementById('bmTotal').textContent = data.total_shipments_evaluated;
+
+        const vsC = data.heuristic_comparisons.vs_greedy_cheapest;
+        document.getElementById('bmVsCheap').textContent = `Saves ${vsC.transit_time_saved_days} days (${vsC.transit_time_saved_pct}%) with ${vsC.risk_reduction_pct}% lower risk (prem: $${vsC.cost_premium_usd.toLocaleString()})`;
+
+        const vsF = data.heuristic_comparisons.vs_greedy_fastest;
+        document.getElementById('bmVsFast').textContent = `Saves $${vsF.cost_saved_usd.toLocaleString()} (${vsF.cost_saved_pct}%) with only +${vsF.transit_time_delta_days} days lead time`;
+
+        document.getElementById('benchmarkLoading').classList.add('hidden');
+        document.getElementById('benchmarkContent').classList.remove('hidden');
+      } catch (err) {
+        console.error("Benchmark failed:", err);
+      }
+    }
+
+    function closeBenchmarkModal() {
+      document.getElementById('benchmarkModal').classList.add('hidden');
+    }
+
+    // Bootstrap
+    window.addEventListener('DOMContentLoaded', initApp);
+  </script>
+</body>
+</html>
